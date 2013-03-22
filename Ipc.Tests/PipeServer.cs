@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using FiftyOne.Mobile.Detection.Provider.Interop;
 
@@ -11,15 +12,45 @@ namespace Ipc.Tests
 {
 	public class PipeServer
 	{
-		public void Start()
+        bool running;
+        Thread runningThread;
+        EventWaitHandle terminateHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
+		private string _pipeName = "testpipe";
+		public string PipeName
 		{
-			//Create a named pipe
-			using (var pipeStream = new NamedPipeServerStream("testpipe", PipeDirection.InOut, 50))
+			get { return _pipeName; }
+			set { _pipeName = value; }
+		}
+
+		void ServerLoop()
+        {
+            while (running)
+            {
+                ProcessNextClient();
+            }
+
+            terminateHandle.Set();
+        }
+
+        public void Run()
+        {
+            running = true;
+            runningThread = new Thread(ServerLoop);
+            runningThread.Start();
+        }
+
+        public void Stop()
+        {
+            running = false;
+            terminateHandle.WaitOne();
+        }
+
+        public void ProcessClientThread(object o)
+        {
+			using (var pipeStream = (NamedPipeServerStream)o)
 			using (var streamReader = new StreamReader(pipeStream))
 			using (var streamWriter = new StreamWriter(pipeStream))
 			{
-				//wait for a connection from another process
-				pipeStream.WaitForConnection();
 				Console.WriteLine("[Server] Pipe connection established");
 				{
 					string userAgent;
@@ -37,7 +68,23 @@ namespace Ipc.Tests
 				}
 			}
 			Console.WriteLine("Connection lost");
-		}
+        }
+
+        public void ProcessNextClient()
+        {
+            try
+            {
+                var pipeStream = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 254);
+                pipeStream.WaitForConnection();
+
+                //Spawn a new thread for each request and continue waiting
+                var t = new Thread(ProcessClientThread);
+                t.Start(pipeStream);
+            }
+            catch
+            {//If there are no more avail connections (254 is in use already) then just keep looping until one is avail
+            }
+        }
 
 		private static bool IsMobileTrie(string userAgent)
 		{
