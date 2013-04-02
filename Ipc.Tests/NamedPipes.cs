@@ -29,10 +29,10 @@ namespace Ipc.Tests
 		public void NamedPipeServerDetectAgent(string agent, string expectedResult)
 		{
 			string response = "";
-
+			//Thread.Sleep(2000);
 			using (var pipeStream = new NamedPipeClientStream(".", _pipeServer.PipeName, PipeDirection.InOut))
-			using (var streamReader = new StreamReader(pipeStream))
-			using (var streamWriter = new StreamWriter(pipeStream))
+			using (var streamReader = new NonClosingStreamReader(pipeStream))
+			using (var streamWriter = new NonClosingStreamWriter(pipeStream))
 			{
 				pipeStream.Connect();
 
